@@ -5,16 +5,22 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.content.ContentValues;
 import android.content.DialogInterface;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.TextView;
 
-import java.util.ArrayList;
+import com.primayasa.todoapp.db.TaskContract;
+import com.primayasa.todoapp.db.TaskDBHelper;
 
 public class HomeActivity extends AppCompatActivity {
-    ArrayList<Todo> todos;
+    Todo[] todos;
+    private TaskDBHelper helper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -22,21 +28,7 @@ public class HomeActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_home);
 
-        Todo[] todos = new Todo[]{
-                new Todo("Coba"),
-                new Todo("Jajal"),
-                new Todo("Hehehe")
-        };
-
-        // Lookup the recyclerview in activity layout
-        RecyclerView recyclerView = (RecyclerView) findViewById(R.id.todo_recycler_view);
-        // Create adapter passing in the sample user data
-        TodoAdapter adapter = new TodoAdapter(todos);
-        recyclerView.setHasFixedSize(true);
-        // Set layout manager to position the items
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        // That's all!
-        recyclerView.setAdapter(adapter);
+        updateUI();
     }
 
     public void addTask(View view) {
@@ -48,12 +40,107 @@ public class HomeActivity extends AppCompatActivity {
         builder.setPositiveButton("Add", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {
-                Log.d("MainActivity",inputField.getText().toString());
+                String task = inputField.getText().toString();
+                Log.d("Monitoring Program", task);
+                Log.d("Monitoring Program", "TASK berhasil didapat");
+
+                helper = new TaskDBHelper(HomeActivity.this);
+                SQLiteDatabase db = helper.getWritableDatabase();
+                ContentValues values = new ContentValues();
+
+                values.clear();
+                values.put(TaskContract.Columns.TASK, task);
+
+                db.insertWithOnConflict(TaskContract.TABLE, null, values, SQLiteDatabase.CONFLICT_IGNORE);
+                Log.d("Monitoring Program", "Database berhasil di simpan");
+                updateUI();
             }
         });
 
         builder.setNegativeButton("Cancel", null);
 
         builder.create().show();
+    }
+
+    public void onEditButtonClick (View view) {
+        View v = (View) view.getParent();
+        TextView taskTextView = (TextView) v.findViewById(R.id.todoTV);
+        String task = taskTextView.getText().toString();
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Update Data");
+        final EditText inputField = new EditText(this);
+        builder.setView(inputField);
+        builder.setPositiveButton("Update", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialogInterface, int i) {
+                String update = inputField.getText().toString();
+
+                String sql = String.format("UPDATE %s SET %s = '%s' WHERE %s = '%s'",
+                        TaskContract.TABLE, TaskContract.Columns.TASK,
+                        update,TaskContract.Columns.TASK, task);
+
+                helper = new TaskDBHelper(HomeActivity.this);
+                SQLiteDatabase sqlDB = helper.getWritableDatabase();
+
+                sqlDB.execSQL(sql);
+                Log.d("Monitoring Program", sql);
+                updateUI();
+            }
+        });
+
+        builder.setNegativeButton("Cancel", null);
+
+        builder.create().show();
+    }
+
+    public void onDeleteButtonClick(View view) {
+        View v = (View) view.getParent();
+        TextView taskTextView = (TextView) v.findViewById(R.id.todoTV);
+        String task = taskTextView.getText().toString();
+
+        String sql = String.format("DELETE FROM %s WHERE %s = '%s'",
+                TaskContract.TABLE, TaskContract.Columns.TASK, task);
+
+
+        helper = new TaskDBHelper(HomeActivity.this);
+        SQLiteDatabase sqlDB = helper.getWritableDatabase();
+        sqlDB.execSQL(sql);
+        updateUI();
+    }
+
+    private void updateUI() {
+        helper = new TaskDBHelper(HomeActivity.this);
+
+        SQLiteDatabase sqlDB = helper.getWritableDatabase();
+        Cursor cursor = sqlDB.rawQuery("SELECT  * FROM tasks", null);
+
+        int length = 0;
+        if (cursor.moveToFirst()) {
+            do {
+                length++;
+            } while (cursor.moveToNext());
+        }
+
+        todos = new Todo[length];
+        int i = 0;
+        if (cursor.moveToFirst()) {
+            Log.d("Monitoring Program", "Database berhasil di get");
+            do {
+                todos[i] = new Todo(cursor.getString(1));
+                Log.d("Monitoring Program", cursor.getString(1));
+                i++;
+            } while (cursor.moveToNext());
+        }
+
+        // Lookup the recyclerview in activity layout
+        RecyclerView recyclerView = (RecyclerView) findViewById(R.id.todo_recycler_view);
+        // Create adapter passing in the sample user data
+        TodoAdapter adapter = new TodoAdapter(todos);
+        recyclerView.setHasFixedSize(true);
+        // Set layout manager to position the items
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        // That's all!
+        recyclerView.setAdapter(adapter);
     }
 }
